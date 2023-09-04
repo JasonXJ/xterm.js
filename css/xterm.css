@@ -157,6 +157,7 @@
 }
 
 .xterm .xterm-accessibility-tree {
+  font-family: monospace;
   user-select: text;
   white-space: pre;
 }

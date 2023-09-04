@@ -32,6 +32,8 @@ export class AccessibilityManager extends Disposable {
   private _rowElements: HTMLElement[];
   private _rowColumns: WeakMap<HTMLElement, number[]> = new WeakMap();
 
+  private _measureElement: HTMLSpanElement;
+
   private _liveRegion: HTMLElement;
   private _liveRegionLineCount: number = 0;
   private _liveRegionDebouncer: IRenderDebouncer;
@@ -76,8 +78,16 @@ export class AccessibilityManager extends Disposable {
     this._rowElements[0].addEventListener('focus', this._topBoundaryFocusListener);
     this._rowElements[this._rowElements.length - 1].addEventListener('focus', this._bottomBoundaryFocusListener);
 
-    this._refreshRowsDimensions();
     this._accessibilityContainer.appendChild(this._rowContainer);
+
+    const measureElementContainer = document.createElement('div');
+    measureElementContainer.setAttribute('aria-hidden', 'true');
+    this._accessibilityContainer.appendChild(measureElementContainer);
+    this._measureElement = document.createElement('span');
+    this._measureElement.textContent = 'X';
+    measureElementContainer.appendChild(this._measureElement);
+    // Same font setting as the rows.
+    this._measureElement.style.fontFamily = 'monospace';
 
     this._liveRegion = document.createElement('div');
     this._liveRegion.classList.add('live-region');
@@ -125,6 +135,7 @@ export class AccessibilityManager extends Disposable {
     // media query that drives the ScreenDprMonitor isn't supported
     this.register(addDisposableDomListener(window, 'resize', () => this._refreshRowsDimensions()));
 
+    this._refreshRowsDimensions();
     this._refreshRows();
     this.register(toDisposable(() => {
       if (DEBUG) {
@@ -410,10 +421,27 @@ export class AccessibilityManager extends Disposable {
     this._refreshRowDimensions(element);
     return element;
   }
+
   private _refreshRowsDimensions(): void {
     if (!this._renderService.dimensions.css.cell.height) {
       return;
     }
+
+    // Adjust character width in the rows to aligh with actual rendering.
+    // Although the text is invisible, screen readers can draw an outline around
+    // it when it is selected. Aligning the characters aligns the outline to the
+    // actual rendering.
+    //
+    // Note that this does not work well if some characters are not provided by
+    // the monospace font. To fix it, we will need a sophisticated rendering
+    // method where different characters are rendered in different width (which
+    // is what DomRenderer is doing).
+    this._measureElement.style.fontSize = `${this._terminal.options.fontSize}px`;
+    Object.assign(this._rowContainer.style, {
+      fontSize: `${this._terminal.options.fontSize}px`,
+      letterSpacing: `${this._renderService.dimensions.css.cell.width - this._measureElement.offsetWidth}px`,
+    });
+
     this._accessibilityContainer.style.width = `${this._renderService.dimensions.css.canvas.width}px`;
     if (this._rowElements.length !== this._terminal.rows) {
       this._handleResize(this._terminal.rows);
@@ -422,6 +450,7 @@ export class AccessibilityManager extends Disposable {
       this._refreshRowDimensions(this._rowElements[i]);
     }
   }
+
   private _refreshRowDimensions(element: HTMLElement): void {
     element.style.height = `${this._renderService.dimensions.css.cell.height}px`;
   }
